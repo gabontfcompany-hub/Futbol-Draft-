@@ -131,7 +131,7 @@
     <!-- Team Creation & Selection Screen -->
     <div id="team-selection-screen" class="min-h-screen flex flex-col items-center justify-center p-4 text-center">
         <h1 class="text-4xl sm:text-5xl font-bold mb-6 text-teal-400">Configuración del Draft</h1>
-        <p class="text-gray-400 text-lg mb-8">Crea entre 2 y 10 equipos y luego selecciona el tuyo para comenzar.</p>
+        <p class="text-gray-400 text-lg mb-8">El primer usuario en unirse puede convertirse en host para configurar los equipos. Después, todos los participantes deben seleccionar su equipo para empezar.</p>
         
         <div class="bg-gray-800 rounded-3xl p-6 sm:p-10 shadow-2xl w-full max-w-xl">
             <div class="flex items-center justify-between mb-4 bg-gray-700 p-4 rounded-xl">
@@ -141,10 +141,7 @@
             
             <h2 class="text-2xl font-bold mb-4 text-blue-400">Crear Equipos</h2>
             <div class="flex flex-col space-y-4 mb-6">
-                <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-                    <input type="password" id="adminCodeInput" placeholder="Código de administrador..." class="flex-grow p-3 rounded-xl bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-yellow-500">
-                    <button onclick="validateAdminCode()" class="px-6 py-3 bg-yellow-600 text-white rounded-full font-bold bid-button hover:bg-yellow-700">Validar Código</button>
-                </div>
+                <button id="becomeHostButton" onclick="becomeHost()" class="w-full px-6 py-3 bg-yellow-600 text-white rounded-full font-bold bid-button hover:bg-yellow-700">Ser Host</button>
                 <div id="adminMessage" class="text-green-400 text-center font-semibold hidden">¡Acceso de administrador concedido!</div>
             </div>
 
@@ -365,8 +362,8 @@
         const gameScreen = document.getElementById('game-screen');
         const rosterContainer = document.getElementById('rosterContainer');
         const tradeControlsContainer = document.getElementById('tradeControlsContainer');
-        const adminCodeInput = document.getElementById('adminCodeInput');
         const adminMessage = document.getElementById('adminMessage');
+        const becomeHostButton = document.getElementById('becomeHostButton');
         const tradeMarket = document.getElementById('tradeMarket');
         const onlineCountEl = document.getElementById('online-count');
         const userIdEl = document.getElementById('user-id');
@@ -465,6 +462,26 @@
                 return;
             }
 
+            // Listen for host status
+            const hostRef = doc(db, 'artifacts', appId, 'public', 'data', 'draft-state', 'host');
+            onSnapshot(hostRef, (docSnap) => {
+                const hostData = docSnap.data();
+                if (hostData && hostData.hostId) {
+                    isAdmin = hostData.hostId === userId;
+                    becomeHostButton.disabled = true;
+                    if (isAdmin) {
+                        adminMessage.classList.remove('hidden');
+                    } else {
+                        adminMessage.classList.add('hidden');
+                    }
+                } else {
+                    isAdmin = false;
+                    becomeHostButton.disabled = false;
+                    adminMessage.classList.add('hidden');
+                }
+                renderTeamList();
+            });
+
             // Listen for all users' presence
             const presenceRef = collection(db, 'artifacts', appId, 'public', 'data', 'presence');
             onSnapshot(presenceRef, (snapshot) => {
@@ -496,6 +513,25 @@
             });
         };
         window.setupListeners = setupListeners;
+        
+        const becomeHost = async () => {
+            const hostRef = doc(db, 'artifacts', appId, 'public', 'data', 'draft-state', 'host');
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const hostDoc = await transaction.get(hostRef);
+                    if (!hostDoc.exists() || !hostDoc.data().hostId) {
+                        transaction.set(hostRef, { hostId: userId, lastUpdated: new Date() });
+                        showMessage('¡Felicidades! Ahora eres el host del draft.');
+                    } else {
+                        showMessage('Otro usuario ya es el host.');
+                    }
+                });
+            } catch (error) {
+                console.error('Error al intentar ser host:', error);
+                showMessage('Error al intentar ser host. Por favor, inténtalo de nuevo.');
+            }
+        };
+        window.becomeHost = becomeHost;
 
         const updateFirebaseTeams = async () => {
             if (!isAdmin) return;
@@ -582,19 +618,6 @@
             addTeamButton.disabled = !isAdmin;
         }
         window.renderTeamList = renderTeamList;
-
-        function validateAdminCode() {
-            if (adminCodeInput.value === '0590') {
-                isAdmin = true;
-                adminMessage.classList.remove('hidden');
-                showMessage('¡Acceso de administrador concedido!');
-            } else {
-                showMessage('Código de administrador incorrecto.');
-                isAdmin = false;
-            }
-            renderTeamList();
-        }
-        window.validateAdminCode = validateAdminCode;
 
         function addTeam() {
             if (!isAdmin) return;
