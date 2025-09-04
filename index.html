@@ -131,7 +131,7 @@
     <!-- Team Creation & Selection Screen -->
     <div id="team-selection-screen" class="min-h-screen flex flex-col items-center justify-center p-4 text-center">
         <h1 class="text-4xl sm:text-5xl font-bold mb-6 text-teal-400">Configuración del Draft</h1>
-        <p class="text-gray-400 text-lg mb-8">El primer usuario en unirse puede convertirse en host para configurar los equipos. Después, todos los participantes deben seleccionar su equipo para empezar.</p>
+        <p class="text-gray-400 text-lg mb-8">El primer usuario que se una puede configurar los equipos. Después, todos los participantes deben seleccionar su equipo para empezar.</p>
         
         <div class="bg-gray-800 rounded-3xl p-6 sm:p-10 shadow-2xl w-full max-w-xl">
             <div class="flex items-center justify-between mb-4 bg-gray-700 p-4 rounded-xl">
@@ -140,10 +140,7 @@
             </div>
             
             <h2 class="text-2xl font-bold mb-4 text-blue-400">Crear Equipos</h2>
-            <div class="flex flex-col space-y-4 mb-6">
-                <button id="becomeHostButton" onclick="becomeHost()" class="w-full px-6 py-3 bg-yellow-600 text-white rounded-full font-bold bid-button hover:bg-yellow-700">Ser Host</button>
-                <div id="adminMessage" class="text-green-400 text-center font-semibold hidden">¡Acceso de administrador concedido!</div>
-            </div>
+            <div id="adminMessage" class="text-green-400 text-center font-semibold mb-4 hidden">¡Acceso de administrador concedido!</div>
 
             <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
                 <input type="text" id="newTeamNameInput" placeholder="Nombre del equipo..." class="flex-grow p-3 rounded-xl bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" disabled>
@@ -363,10 +360,9 @@
         const rosterContainer = document.getElementById('rosterContainer');
         const tradeControlsContainer = document.getElementById('tradeControlsContainer');
         const adminMessage = document.getElementById('adminMessage');
-        const becomeHostButton = document.getElementById('becomeHostButton');
-        const tradeMarket = document.getElementById('tradeMarket');
         const onlineCountEl = document.getElementById('online-count');
         const userIdEl = document.getElementById('user-id');
+        const tradeMarket = document.getElementById('tradeMarket');
 
         const auctionInfo = document.getElementById('auctionInfo');
         const playerImageElem = document.getElementById('playerImage');
@@ -446,6 +442,7 @@
                         await setDoc(userPresenceRef, { online: true, lastSeen: new Date(), selectedTeam: null }, { merge: true });
 
                         setupListeners();
+                        checkAndSetHost();
                     } else {
                         console.log('No user is signed in.');
                     }
@@ -468,7 +465,6 @@
                 const hostData = docSnap.data();
                 if (hostData && hostData.hostId) {
                     isAdmin = hostData.hostId === userId;
-                    becomeHostButton.disabled = true;
                     if (isAdmin) {
                         adminMessage.classList.remove('hidden');
                     } else {
@@ -476,7 +472,6 @@
                     }
                 } else {
                     isAdmin = false;
-                    becomeHostButton.disabled = false;
                     adminMessage.classList.add('hidden');
                 }
                 renderTeamList();
@@ -514,24 +509,20 @@
         };
         window.setupListeners = setupListeners;
         
-        const becomeHost = async () => {
-            const hostRef = doc(db, 'artifacts', appId, 'public', 'data', 'draft-state', 'host');
+        const checkAndSetHost = async () => {
+             const hostRef = doc(db, 'artifacts', appId, 'public', 'data', 'draft-state', 'host');
             try {
-                await runTransaction(db, async (transaction) => {
-                    const hostDoc = await transaction.get(hostRef);
-                    if (!hostDoc.exists() || !hostDoc.data().hostId) {
-                        transaction.set(hostRef, { hostId: userId, lastUpdated: new Date() });
-                        showMessage('¡Felicidades! Ahora eres el host del draft.');
-                    } else {
-                        showMessage('Otro usuario ya es el host.');
-                    }
-                });
+                const hostDoc = await getDoc(hostRef);
+                if (!hostDoc.exists() || !hostDoc.data().hostId) {
+                    await setDoc(hostRef, { hostId: userId, lastUpdated: new Date() });
+                    showMessage('¡Felicidades! Ahora eres el host del draft. Puedes empezar a crear equipos.');
+                }
             } catch (error) {
                 console.error('Error al intentar ser host:', error);
-                showMessage('Error al intentar ser host. Por favor, inténtalo de nuevo.');
+                showMessage('Error al conectar con la base de datos. Intenta recargar la página.');
             }
         };
-        window.becomeHost = becomeHost;
+        window.checkAndSetHost = checkAndSetHost;
 
         const updateFirebaseTeams = async () => {
             if (!isAdmin) return;
